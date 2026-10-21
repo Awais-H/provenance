@@ -9,9 +9,12 @@ fabricate one: the synthesis prompt is explicitly instructed to decline.
 from __future__ import annotations
 
 import json
+import re
 
 from .. import config, llm
 from ..models import ConflictPair
+
+CITATION = re.compile(r"\[(\d+)\]")
 
 RERANK_PROMPT = """A developer selected a piece of code and wants to know which of
 these engineering discussions actually explain why it is the way it is.
@@ -153,6 +156,12 @@ def _render_threads(hits: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def uncited_references(synthesis: str, evidence_count: int) -> list[int]:
+    """Citation numbers in `synthesis` that point at no evidence it was shown."""
+    cited = {int(n) for n in CITATION.findall(synthesis)}
+    return sorted(n for n in cited if not 1 <= n <= evidence_count)
+
+
 async def synthesize(hits: list[dict], description: str) -> tuple[str | None, list[ConflictPair]]:
     """-> (synthesis, conflicts). A parse or call failure returns (None, []) and the
     request still completes with evidence but no narrative (18 row 9)."""
@@ -173,6 +182,12 @@ async def synthesize(hits: list[dict], description: str) -> tuple[str | None, li
         return None, []
 
     synthesis = str(raw.get("synthesis") or "").strip() or None
+
+    # A citation to evidence that was never shown is a fabricated source. Better no
+    # narrative than one the panel can't back up -- the evidence still ships.
+    if synthesis and (bad := uncited_references(synthesis, len(hits))):
+        print(f"  ! synthesis cited missing evidence {bad}, dropping it")
+        synthesis = None
 
     conflicts: list[ConflictPair] = []
     seen: set[tuple[int, int, str]] = set()
