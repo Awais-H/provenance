@@ -8,7 +8,9 @@ Checks, per 16:
   (a) expected evidence appears, and at what rank;
   (b) the null case returns zero results and a `message`;
   (c) the conflict case has a non-empty `conflicts` list and at least one
-      CONFLICTS_WITH / SUPERSEDES edge in the graph.
+      CONFLICTS_WITH / SUPERSEDES edge in the graph;
+  (d) every [n] the synthesis cites is evidence actually returned, and the null
+      case carries no synthesis at all.
 
 `--calibrate` runs in-process rather than over HTTP: the absolute dense score the
 threshold compares against is an internal retrieval value and is deliberately not
@@ -28,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from evals.queries import QUERIES                       # noqa: E402
 from provenance import config                            # noqa: E402
+from provenance.service.rerank import CITATION           # noqa: E402
 
 DEFAULT_REPO = config.REPO_ROOT / "seed" / "repo"
 TIMEOUT = 120
@@ -78,10 +81,18 @@ def run_suite(repo: Path, service_url: str) -> int:
         results = data.get("results") or []
         found = [(r.get("channel_name"), r.get("date")) for r in results]
 
+        synthesis = data.get("synthesis") or ""
+        if synthesis:
+            cited = {int(n) for n in CITATION.findall(synthesis)}
+            dangling = sorted(n for n in cited if not 1 <= n <= len(results))
+            _check("citations point at returned evidence", not dangling,
+                   f"dangling {dangling}" if dangling else f"cites {sorted(cited)}", failures)
+
         if expect_null:
             _check("returns no results", not results, f"got {len(results)}", failures)
             _check("returns a message", bool(data.get("message")),
                    repr(data.get("message")), failures)
+            _check("no narrative without evidence", not synthesis, synthesis[:80], failures)
         else:
             for channel, marker in expected:
                 rank = None
