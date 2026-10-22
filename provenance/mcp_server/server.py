@@ -16,6 +16,7 @@ import sys
 
 import httpx
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 
 from .. import config, observability
 
@@ -101,7 +102,17 @@ def _render(data: dict) -> str:
     return "\n".join(out)
 
 
-@server.tool()
+@server.tool(
+    title="Search team context",
+    # Read-only and safe to repeat, so clients can run it without a confirmation
+    # prompt; open-world because the answer comes from Slack, GitHub and Sentry.
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=True,
+    ),
+)
 async def search_team_context(
     code: str,
     file_path: str,
