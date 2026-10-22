@@ -11,6 +11,12 @@ description = "Recover the evidence chain behind a piece of code."
 requires-python = ">=3.12"
 dynamic = ["dependencies"]
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [project.scripts]
 provenance = "provenance.cli.main:main"
 # The private connector. A console script rather than `python -m`, because the
